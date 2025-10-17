@@ -1,19 +1,11 @@
-from flask import Flask, render_template_string, request, jsonify, send_file
+from flask import Flask, render_template_string, request, jsonify
 from flask_cors import CORS
 import os
 from datetime import datetime
-import base64
-import hashlib
-import json
-from functools import wraps
-import io
 
 app = Flask(__name__)
 CORS(app)
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
-
-ADMIN_USER = 'admin'
-ADMIN_PASS = 'cultimed2024'
 
 HTML_CLIENTE = """<!DOCTYPE html>
 <html lang="es">
@@ -60,6 +52,7 @@ HTML_CLIENTE = """<!DOCTYPE html>
             border: 2px solid #e0e0e0;
             border-radius: 8px;
             font-size: 1em;
+            font-family: monospace;
         }
         .form-group input:focus, .form-group textarea:focus {
             outline: none;
@@ -68,6 +61,9 @@ HTML_CLIENTE = """<!DOCTYPE html>
         }
         .rut-valid { border-color: #28a745 !important; }
         .rut-invalid { border-color: #dc3545 !important; }
+        .rut-status { font-size: 0.85em; margin-top: 4px; }
+        .rut-status.valid { color: #28a745; }
+        .rut-status.invalid { color: #dc3545; }
         .file-upload {
             border: 2px dashed #667eea;
             border-radius: 8px;
@@ -100,7 +96,7 @@ HTML_CLIENTE = """<!DOCTYPE html>
 <body>
     <div class="container">
         <div class="header">
-            <h1>💊 CUMTIMED</h1>
+            <h1>💊 CULTIMED</h1>
             <p>Registro de Clientes - Receta Médica</p>
         </div>
         <div class="form-container">
@@ -118,8 +114,9 @@ HTML_CLIENTE = """<!DOCTYPE html>
                     <input type="tel" id="telefono" name="telefono" required placeholder="+56 9 1234 5678">
                 </div>
                 <div class="form-group">
-                    <label for="rut">RUT/Cédula *</label>
-                    <input type="text" id="rut" name="rut" required placeholder="12.345.678-9">
+                    <label for="rut">RUT/Cédula * (Se auto-ordena)</label>
+                    <input type="text" id="rut" name="rut" required placeholder="12345678-9 o 12.345.678-9">
+                    <div class="rut-status" id="rutStatus"></div>
                 </div>
                 <div class="form-group">
                     <label>Receta Médica (PDF, JPG, PNG - máx 5MB) *</label>
@@ -156,26 +153,72 @@ HTML_CLIENTE = """<!DOCTYPE html>
         const progressBar = document.getElementById('progressBar');
         const submitBtn = document.getElementById('submitBtn');
         const rutInput = document.getElementById('rut');
+        const rutStatus = document.getElementById('rutStatus');
+
+        function formatRUT(rut) {
+            // Extrae solo números y la letra
+            rut = rut.replace(/[^0-9kK]/g, '');
+            if (!rut) return '';
+            
+            // Separa número y dígito verificador
+            const rutNum = rut.slice(0, -1);
+            const dv = rut.slice(-1).toUpperCase();
+            
+            if (!rutNum) return '';
+            
+            // Formatea con puntos cada 3 dígitos de atrás hacia adelante
+            let formatted = '';
+            for (let i = rutNum.length - 1, count = 0; i >= 0; i--, count++) {
+                if (count > 0 && count % 3 === 0) formatted = '.' + formatted;
+                formatted = rutNum[i] + formatted;
+            }
+            
+            return formatted + '-' + dv;
+        }
 
         function validateRUT(rut) {
             rut = rut.replace(/[^0-9kK]/g, '');
-            if (!rut) return false;
+            if (!rut || rut.length < 2) return false;
+            
             const rutNum = rut.slice(0, -1);
             const dv = rut.slice(-1).toUpperCase();
+            
             let sum = 0, mult = 2;
             for (let i = rutNum.length - 1; i >= 0; i--) {
                 sum += parseInt(rutNum[i]) * mult;
                 mult = mult === 9 ? 2 : mult + 1;
             }
+            
             const resto = 11 - (sum % 11);
             const dvCalc = resto === 11 ? '0' : resto === 10 ? 'K' : resto.toString();
             return dvCalc === dv;
         }
 
         rutInput.addEventListener('input', (e) => {
-            const valid = validateRUT(e.target.value);
-            e.target.classList.toggle('rut-valid', valid);
-            e.target.classList.toggle('rut-invalid', !valid && e.target.value.length > 5);
+            // Auto-formatea mientras escribe
+            let value = e.target.value;
+            let formatted = formatRUT(value);
+            e.target.value = formatted;
+            
+            // Valida y muestra estado
+            const valid = validateRUT(formatted);
+            const isEmpty = formatted.length === 0;
+            
+            e.target.classList.remove('rut-valid', 'rut-invalid');
+            rutStatus.className = 'rut-status';
+            rutStatus.textContent = '';
+            
+            if (!isEmpty) {
+                if (valid) {
+                    e.target.classList.add('rut-valid');
+                    rutStatus.className = 'rut-status valid';
+                    rutStatus.textContent = '✅ RUT válido';
+                } else if (formatted.length > 5) {
+                    e.target.classList.add('rut-invalid');
+                    rutStatus.className = 'rut-status invalid';
+                    rutStatus.textContent = '❌ RUT inválido';
+                }
+            }
         });
 
         upload.addEventListener('click', () => fileInput.click());
@@ -201,10 +244,12 @@ HTML_CLIENTE = """<!DOCTYPE html>
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
+            
             if (!fileInput.files.length) {
                 showMsg('❌ Selecciona un archivo', 'error');
                 return;
             }
+            
             if (!validateRUT(rutInput.value)) {
                 showMsg('❌ RUT inválido', 'error');
                 return;
@@ -222,6 +267,7 @@ HTML_CLIENTE = """<!DOCTYPE html>
                     form.reset();
                     fileInfo.textContent = '';
                     rutInput.classList.remove('rut-valid');
+                    rutStatus.textContent = '';
                 } else {
                     const err = await res.json();
                     showMsg('❌ Error: ' + (err.message || err.error || 'Error desconocido'), 'error');
@@ -240,63 +286,4 @@ HTML_CLIENTE = """<!DOCTYPE html>
         }
     </script>
 </body>
-</html>"""
-
-registros_db = {}
-
-@app.route('/')
-def index():
-    return render_template_string(HTML_CLIENTE)
-
-@app.route('/api/registro', methods=['POST'])
-def registro():
-    try:
-        nombre = request.form.get('nombre')
-        email = request.form.get('email')
-        telefono = request.form.get('telefono')
-        rut = request.form.get('rut')
-        doctor = request.form.get('doctor', '')
-        notas = request.form.get('notas', '')
-        archivo = request.files.get('fileInput')
-
-        if not all([nombre, email, telefono, rut, archivo]):
-            return jsonify({'error': 'Faltan datos', 'message': 'Completa todos los campos obligatorios'}), 400
-
-        if archivo.filename == '':
-            return jsonify({'error': 'Sin archivo', 'message': 'Selecciona un archivo de receta'}), 400
-
-        allowed = {'pdf', 'jpg', 'jpeg', 'png'}
-        ext = archivo.filename.rsplit('.', 1)[1].lower() if '.' in archivo.filename else ''
-        if ext not in allowed:
-            return jsonify({'error': 'Formato inválido', 'message': 'Solo PDF, JPG, PNG permitidos'}), 400
-
-        archivo.seek(0, 2)
-        size = archivo.tell()
-        if size > 5 * 1024 * 1024:
-            return jsonify({'error': 'Archivo muy grande', 'message': 'Máximo 5MB'}), 400
-        archivo.seek(0)
-
-        datos = {
-            'rut': rut,
-            'nombre': nombre,
-            'email': email,
-            'telefono': telefono,
-            'doctor': doctor,
-            'notas': notas,
-            'fecha': datetime.now().isoformat()
-        }
-        
-        registros_db[rut] = datos
-        
-        return jsonify({'success': True, 'message': 'Registro guardado correctamente'}), 200
-    
-    except Exception as e:
-        print(f"Error: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/health')
-def health():
-    return jsonify({'app': 'CULTIMED', 'status': 'OK'}), 200
-
-if __name__ == '__main__':
-    app.run(debug=False)
+</html>""
