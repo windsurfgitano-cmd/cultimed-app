@@ -6,9 +6,8 @@ from supabase import create_client
 app = Flask(__name__)
 CORS(app)
 
-# Supabase con token correcto
 SUPABASE_URL = "https://lgicluwwfecrbnfxmbzf.supabase.co"
-SUPABASE_KEY = "sbp_84fa682bc6d4f5c0692d797bd5a43f29d0a2bbda"  # Token correcto
+SUPABASE_KEY = "sbp_84fa682bc6d4f5c0692d797bd5a43f29d0a2bbda"
 sb = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def validar_rut(rut):
@@ -73,7 +72,7 @@ HTML = """<!DOCTYPE html>
     <div class="container">
         <div class="header">
             <h1>💊 CULTIMED</h1>
-            <p>Registro de Clientes - Receta Médica</p>
+            <p>Registro de Clientes - Receta Medica</p>
         </div>
         <div class="form-container">
             <form id="form">
@@ -95,9 +94,9 @@ HTML = """<!DOCTYPE html>
                     <div class="rut-status" id="rutStatus"></div>
                 </div>
                 <div class="form-group">
-                    <label>Beceta Medica (PDF, JPG, PNG - max 5MB) *</label>
+                    <label>Receta Medica (PDF, JPG, PNG - max 5MB) *</label>
                     <div class="file-upload" id="upload">
-                        <p>📎 Arrastra archivo o haz click para seleccionar</p>
+                        <p>Arrastra archivo o haz click para seleccionar</p>
                         <input type="file" id="fileInput" name="fileInput" accept=".pdf,.jpg,.jpeg,.png" required>
                         <div class="file-name" id="fileName"></div>
                     </div>
@@ -149,11 +148,11 @@ HTML = """<!DOCTYPE html>
                 }
                 const dvCalc = (11 - (s % 11)) % 11 === 10 ? 'K' : ((11 - (s % 11)) % 11).toString();
                 const valido = dvCalc === dv;
-                rutStatus.textContent = valido ? '✓ Valido' : '✗ Invalido';
+                rutStatus.textContent = valido ? 'Valido' : 'Invalido';
                 rutStatus.className = 'rut-status ' + (valido ? 'rut-valid' : 'rut-invalid');
                 return valido;
             } catch (e) {
-                rutStatus.textContent = '✗ Invalido';
+                rutStatus.textContent = 'Invalido';
                 rutStatus.className = 'rut-status rut-invalid';
                 return false;
             }
@@ -164,7 +163,7 @@ HTML = """<!DOCTYPE html>
             if (fileInput.files.length > 0) {
                 const file = fileInput.files[0];
                 const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
-                fileName.textContent = '✓ ' + file.name + ' (' + sizeMB + 'MB)';
+                fileName.textContent = file.name + ' (' + sizeMB + 'MB)';
             }
         });
 
@@ -181,17 +180,17 @@ HTML = """<!DOCTYPE html>
             try {
                 const res = await fetch('/api/registro', { method: 'POST', body: fd });
                 const data = await res.json();
-
+                
                 if (res.ok) {
-                    showMsg('✓ Registro guardado! Revisa tu email 📧', 'success');
+                    showMsg('Registro guardado! Revisa tu email', 'success');
                     form.reset();
                     fileName.textContent = '';
                     rutStatus.textContent = '';
                 } else {
-                    showMsg('✗ Error: ' + (data.message || data.error || 'Intenta de nuevo'), 'error');
+                    showMsg('Error: ' + (data.message || data.error || 'Intenta de nuevo'), 'error');
                 }
             } catch (e) {
-                showMsg('✗ Error de conexion: ' + e.message, 'error');
+                showMsg('Error de conexion: ' + e.message, 'error');
             } finally {
                 btn.disabled = false;
                 loading.style.display = 'none';
@@ -225,7 +224,7 @@ def registro():
         if not validar_rut(cedula):
             return jsonify({'error': 'RUT invalido', 'message': 'Verifica el RUT'}), 400
 
-        ext = archivo.filename.rsplit('.', 1)[1].lower() if '.& in archivo.filename else ''
+        ext = archivo.filename.rsplit('.', 1)[1].lower() if '.' in archivo.filename else ''
         if ext not in ['pdf', 'jpg', 'jpeg', 'png']:
             return jsonify({'error': 'Formato no permitido', 'message': 'Solo PDF, JPG, PNG'}), 400
 
@@ -237,11 +236,9 @@ def registro():
 
         file_content = archivo.read()
         file_path = f"{cedula}/{datetime.now().isoformat()}_{archivo.filename}"
-
-        # Subir a Supabase Storage
+        
         sb.storage.from_("recetas").upload(file_path, file_content)
 
-        # Guardar en BD
         datos = {
             'cedula': cedula,
             'nombre': nombre,
@@ -254,7 +251,7 @@ def registro():
         sb.table('clientes').insert(datos).execute()
 
         return jsonify({'success': True, 'message': 'Registro guardado correctamente'}), 200
-
+    
     except Exception as e:
         print(f"Error: {str(e)}")
         return jsonify({'error': str(e), 'message': 'Error en servidor'}), 500
