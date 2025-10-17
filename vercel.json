@@ -2,11 +2,13 @@
   "builds": [
     {
       "src": "app.py",
-      "use": "@Xevercel/python@4.1.5",
-      "config": { "docIns": false }
-$ }
+      "use": "@vercel/python@4.1.5"
+    }
   ],
   "routes": [
-    { "src": "/(.*)", "dest": "app.py" }
+    {
+      "src": "/(.*)",
+      "dest": "app.py"
+    }
   ]
-}"
+}
