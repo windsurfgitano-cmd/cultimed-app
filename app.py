@@ -3,12 +3,15 @@ from flask_cors import CORS
 from datetime import datetime
 import os
 
+# 1. INICIALIZACIÓN DE FLASK
+# ==================================
 app = Flask(__name__)
 CORS(app)
 
-# Variables de entorno
+# 2. CONFIGURACIÓN DE SUPABASE (Variables de Entorno)
+# =======================================================
 SUPABASE_URL = os.getenv('SUPABASE_URL', 'https://lgicluwwfecrbnfxmbzf.supabase.co')
-SUPABASE_KEY = os.getenv('SUPABASE_KEY', '')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY', '') # La KEY debe estar en tus variables de entorno de Vercel
 
 sb = None
 if SUPABASE_KEY:
@@ -16,9 +19,12 @@ if SUPABASE_KEY:
         from supabase import create_client
         sb = create_client(SUPABASE_URL, SUPABASE_KEY)
     except Exception as e:
-        print(f"Error Supabase: {e}")
+        print(f"Error al inicializar Supabase: {e}")
 
+# 3. LÓGICA DE LA APLICACIÓN (Funciones)
+# =========================================
 def validar_rut(rut):
+    """Función para validar un RUT chileno."""
     rut = rut.upper().replace(".", "").replace("-", "")
     if len(rut) < 2:
         return False
@@ -42,6 +48,9 @@ def validar_rut(rut):
     except:
         return False
 
+# 4. PLANTILLA HTML
+# =========================================
+# Este es el frontend que se mostrará al usuario.
 HTML = """<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -119,4 +128,28 @@ HTML = """<!DOCTYPE html>
 </html>
 """
 
-# ... (El resto de tu código Flask, como @app.route, etc.)
+# 5. RUTAS DE LA API (Endpoints)
+# =================================
+@app.route('/')
+def index():
+    """Ruta principal que muestra el formulario HTML."""
+    return render_template_string(HTML)
+
+@app.route('/validar-rut', methods=['POST'])
+def handle_validar_rut():
+    """Ruta para validar el RUT desde el frontend."""
+    rut = request.json.get('rut')
+    if not rut:
+        return jsonify({'valido': False, 'error': 'RUT no proporcionado'}), 400
+    
+    es_valido = validar_rut(rut)
+    return jsonify({'valido': es_valido})
+
+# (Aquí puedes agregar más rutas, como una para manejar el envío del formulario completo)
+# Ejemplo: @app.route('/submit-form', methods=['POST']) ...
+
+# 6. EJECUCIÓN DE LA APLICACIÓN
+# =================================
+# Esta parte permite ejecutar el servidor localmente para pruebas.
+if __name__ == '__main__':
+    app.run(debug=True)
