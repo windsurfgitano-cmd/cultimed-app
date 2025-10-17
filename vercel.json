@@ -1,0 +1,12 @@
+{
+  "builds": [
+    {
+      "src": "app.py",
+      "use": "@Xevercel/python@4.1.5",
+      "config": { "docIns": false }
+$ }
+  ],
+  "routes": [
+    { "src": "/(.*)", "dest": "app.py" }
+  ]
+}"
