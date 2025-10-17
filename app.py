@@ -145,7 +145,7 @@ def index():
     return render_template_string(HTML_TEMPLATE)
 
 @app.route('/api/registro', methods=['POST'])
-def registroo):
+def registro():
     try:
         nombre = request.form.get('nombre')
         email = request.form.get('email')
