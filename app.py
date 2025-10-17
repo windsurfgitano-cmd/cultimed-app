@@ -6,8 +6,9 @@ from supabase import create_client
 app = Flask(__name__)
 CORS(app)
 
+# Supabase con token correcto
 SUPABASE_URL = "https://lgicluwwfecrbnfxmbzf.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnaWNsdXd3ZmVjcmJuZnhtYnpmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mjc5MjU5MjMsImV4cCI6MjA0MzUwMTkyM30.x0hKgAu7wHlKNZkMPxK8vJZmO52F6m7VfpwvJvQoHcw"
+SUPABASE_KEY = "sbp_84fa682bc6d4f5c0692d797bd5a43f29d0a2bbda"  # Token correcto
 sb = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def validar_rut(rut):
@@ -46,23 +47,26 @@ HTML = """<!DOCTYPE html>
         .container { background: white; border-radius: 15px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); max-width: 600px; width: 100%; animation: slideIn 0.5s ease-out; }
         @keyframes slideIn { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
         .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px 20px; text-align: center; }
+        .header h1 { font-size: 2.5em; margin-bottom: 10px; }
         .form-container { padding: 30px; }
         .form-group { margin-bottom: 20px; }
         label { display: block; margin-bottom: 8px; color: #333; font-weight: 500; }
         input, textarea { width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 1em; }
         input:focus, textarea:focus { outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102,126,234,0.1); }
-        .file-upload { border: 2px dashed #667eea; border-radius: 8px; padding: 20px; text-align: center; cursor: pointer; }
+        .file-upload { border: 2px dashed #667eea; border-radius: 8px; padding: 20px; text-align: center; cursor: pointer; background: #f9f9f9; }
         .file-upload:hover { background: rgba(102,126,234,0.05); }
         #fileInput { display: none; }
         .file-name { color: #667eea; margin-top: 10px; font-weight: 500; }
-        .rut-status { margin-top: 5px; font-size: 0.9em; }
-        .rut-valid { color: green; }
-        .rut-invalid { color: red; }
-        button { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 1em; cursor: pointer; font-weight: 600; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; margin-top: 20px; }
+        .rut-status { margin-top: 5px; font-size: 0.9em; font-weight: 500; }
+        .rut-valid { color: #28a745; }
+        .rut-invalid { color: #dc3545; }
+        button { width: 100%; padding: 14px; border: none; border-radius: 8px; font-size: 1.1em; cursor: pointer; font-weight: 600; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; margin-top: 20px; transition: all 0.3s; }
         button:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(102,126,234,0.3); }
-        .message { margin-top: 20px; padding: 15px; border-radius: 8px; display: none; }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
+        .message { margin-top: 20px; padding: 15px; border-radius: 8px; display: none; font-weight: 500; }
         .message.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; display: block; }
         .message.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; display: block; }
+        .loading { display: none; text-align: center; color: #667eea; font-weight: 500; }
     </style>
 </head>
 <body>
@@ -93,12 +97,13 @@ HTML = """<!DOCTYPE html>
                 <div class="form-group">
                     <label>Beceta Medica (PDF, JPG, PNG - max 5MB) *</label>
                     <div class="file-upload" id="upload">
-                        <p>Arrastra archivo o haz click</p>
+                        <p>📎 Arrastra archivo o haz click para seleccionar</p>
                         <input type="file" id="fileInput" name="fileInput" accept=".pdf,.jpg,.jpeg,.png" required>
                         <div class="file-name" id="fileName"></div>
                     </div>
                 </div>
-                <button type="submit">Enviar Registro</button>
+                <button type="submit" id="btn">Enviar Registro</button>
+                <div class="loading" id="loading">Guardando...</div>
                 <div class="message" id="msg"></div>
             </form>
         </div>
@@ -112,6 +117,8 @@ HTML = """<!DOCTYPE html>
         const fileInput = document.getElementById('fileInput');
         const fileName = document.getElementById('fileName');
         const msg = document.getElementById('msg');
+        const btn = document.getElementById('btn');
+        const loading = document.getElementById('loading');
 
         cedula.addEventListener('input', (e) => {
             let val = e.target.value.toUpperCase().replace(/[^0-9K-]/g, '');
@@ -142,11 +149,11 @@ HTML = """<!DOCTYPE html>
                 }
                 const dvCalc = (11 - (s % 11)) % 11 === 10 ? 'K' : ((11 - (s % 11)) % 11).toString();
                 const valido = dvCalc === dv;
-                rutStatus.textContent = valido ? 'Valido' : 'Invalido';
+                rutStatus.textContent = valido ? '✓ Valido' : '✗ Invalido';
                 rutStatus.className = 'rut-status ' + (valido ? 'rut-valid' : 'rut-invalid');
                 return valido;
             } catch (e) {
-                rutStatus.textContent = 'Invalido';
+                rutStatus.textContent = '✗ Invalido';
                 rutStatus.className = 'rut-status rut-invalid';
                 return false;
             }
@@ -157,7 +164,7 @@ HTML = """<!DOCTYPE html>
             if (fileInput.files.length > 0) {
                 const file = fileInput.files[0];
                 const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
-                fileName.textContent = file.name + ' (' + sizeMB + 'MB)';
+                fileName.textContent = '✓ ' + file.name + ' (' + sizeMB + 'MB)';
             }
         });
 
@@ -166,20 +173,28 @@ HTML = """<!DOCTYPE html>
             if (!validarRUT(cedula.value)) { showMsg('RUT invalido', 'error'); return; }
             if (!fileInput.files.length) { showMsg('Selecciona un archivo', 'error'); return; }
 
+            btn.disabled = true;
+            loading.style.display = 'block';
+            msg.style.display = 'none';
+
             const fd = new FormData(form);
             try {
                 const res = await fetch('/api/registro', { method: 'POST', body: fd });
+                const data = await res.json();
+
                 if (res.ok) {
-                    showMsg('Registro guardado! Revisa tu email', 'success');
+                    showMsg('✓ Registro guardado! Revisa tu email 📧', 'success');
                     form.reset();
                     fileName.textContent = '';
                     rutStatus.textContent = '';
                 } else {
-                    const err = await res.json();
-                    showMsg('Error: ' + (err.message || 'Intenta de nuevo'), 'error');
+                    showMsg('✗ Error: ' + (data.message || data.error || 'Intenta de nuevo'), 'error');
                 }
             } catch (e) {
-                showMsg('Error: ' + e.message, 'error');
+                showMsg('✗ Error de conexion: ' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+                loading.style.display = 'none';
             }
         });
 
@@ -210,29 +225,43 @@ def registro():
         if not validar_rut(cedula):
             return jsonify({'error': 'RUT invalido', 'message': 'Verifica el RUT'}), 400
 
-        ext = archivo.filename.rsplit('.', 1)[1].lower() if '.' in archivo.filename else ''
+        ext = archivo.filename.rsplit('.', 1)[1].lower() if '.& in archivo.filename else ''
         if ext not in ['pdf', 'jpg', 'jpeg', 'png']:
-            return jsonify({'error': 'Formato no permitido'}), 400
+            return jsonify({'error': 'Formato no permitido', 'message': 'Solo PDF, JPG, PNG'}), 400
 
         archivo.seek(0, 2)
-        if archivo.tell() > 5 * 1024 * 1024:
-            return jsonify({'error': 'Archivo > 5MB'}), 400
+        size = archivo.tell()
+        if size > 5 * 1024 * 1024:
+            return jsonify({'error': 'Archivo > 5MB', 'message': 'Max 5MB'}), 400
         archivo.seek(0)
 
         file_content = archivo.read()
         file_path = f"{cedula}/{datetime.now().isoformat()}_{archivo.filename}"
+
+        # Subir a Supabase Storage
         sb.storage.from_("recetas").upload(file_path, file_content)
 
-        datos = {'cedula': cedula, 'nombre': nombre, 'email': email, 'telefono': telefono, 'archivo': file_path, 'estado': 'pendiente', 'created_at': datetime.now().isoformat()}
+        # Guardar en BD
+        datos = {
+            'cedula': cedula,
+            'nombre': nombre,
+            'email': email,
+            'telefono': telefono,
+            'archivo': file_path,
+            'estado': 'pendiente',
+            'created_at': datetime.now().isoformat()
+        }
         sb.table('clientes').insert(datos).execute()
 
-        return jsonify({'success': True, 'message': 'Registro guardado'}), 200
+        return jsonify({'success': True, 'message': 'Registro guardado correctamente'}), 200
+
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"Error: {str(e)}")
+        return jsonify({'error': str(e), 'message': 'Error en servidor'}), 500
 
 @app.route('/health')
 def health():
-    return jsonify({'status': 'OK'}), 200
+    return jsonify({'status': 'OK', 'app': 'CULTIMED'}), 200
 
 if __name__ == '__main__':
     app.run(debug=False)
