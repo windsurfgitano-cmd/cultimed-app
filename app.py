@@ -48,9 +48,8 @@ def validar_rut(rut):
     except:
         return False
 
-# 4. PLANTILLA HTML
-# =========================================
-# Este es el frontend que se mostrará al usuario.
+# 4. PLANTILLA HTML CON JAVASCRIPT INTEGRADO
+# ==================================================
 HTML = """<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -69,8 +68,9 @@ HTML = """<!DOCTYPE html>
         label { display: block; margin-bottom: 8px; color: #333; font-weight: 500; }
         input, textarea { width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 1em; transition: all 0.2s ease-in-out; }
         input:focus, textarea:focus { outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102,126,234,0.1); }
-        .file-upload { border: 2px dashed #667eea; border-radius: 8px; padding: 20px; text-align: center; cursor: pointer; background: #f9f9f9; }
+        .file-upload { border: 2px dashed #667eea; border-radius: 8px; padding: 20px; text-align: center; cursor: pointer; background: #f9f9f9; transition: all 0.2s ease-in-out; }
         .file-upload:hover { background: rgba(102,126,234,0.05); }
+        .file-upload.error { border-color: #dc3545; background: #f8d7da; } /* Estilo de error para el campo de archivo */
         #fileInput { display: none; }
         .file-name { color: #667eea; margin-top: 10px; font-weight: 500; }
         .rut-status { margin-top: 5px; font-size: 0.9em; font-weight: 500; height: 1em; }
@@ -92,8 +92,7 @@ HTML = """<!DOCTYPE html>
             <p>Registro de Clientes - Receta Médica</p>
         </div>
         <div class="form-container">
-            <form id="form">
-                <div class="form-group">
+            <form id="form" novalidate> <div class="form-group">
                     <label for="nombre">Nombre Completo *</label>
                     <input type="text" id="nombre" name="nombre" required placeholder="Juan Pérez">
                 </div>
@@ -112,7 +111,7 @@ HTML = """<!DOCTYPE html>
                 </div>
                 <div class="form-group">
                     <label>Receta (PDF/JPG/PNG, max 5MB) *</label>
-                    <div class="file-upload" id="upload">
+                    <div class="file-upload" id="uploadArea">
                         <p>Arrastra tu archivo aquí o haz clic para seleccionar</p>
                         <input type="file" id="fileInput" name="fileInput" accept=".pdf,.jpg,.jpeg,.png" required>
                         <div class="file-name" id="fileName"></div>
@@ -124,6 +123,57 @@ HTML = """<!DOCTYPE html>
             </form>
         </div>
     </div>
+
+    <script>
+        const form = document.getElementById('form');
+        const fileInput = document.getElementById('fileInput');
+        const uploadArea = document.getElementById('uploadArea');
+        const msgDiv = document.getElementById('msg');
+        const fileNameDiv = document.getElementById('fileName');
+
+        // Simular clic en el input oculto
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        // Mostrar nombre del archivo seleccionado
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) {
+                fileNameDiv.textContent = fileInput.files[0].name;
+                uploadArea.classList.remove('error'); // Quita el error si el usuario selecciona un archivo
+                msgDiv.style.display = 'none';
+            }
+        });
+
+        // Validar el formulario antes de enviarlo
+        form.addEventListener('submit', function(event) {
+            // Prevenir el envío por defecto para validar primero
+            event.preventDefault();
+
+            let isValid = true;
+            
+            // Validar que el archivo no esté vacío
+            if (fileInput.files.length === 0) {
+                isValid = false;
+                uploadArea.classList.add('error');
+                msgDiv.textContent = 'Por favor, selecciona un archivo de receta para continuar.';
+                msgDiv.className = 'message error';
+            } else {
+                uploadArea.classList.remove('error');
+            }
+
+            // Aquí podrías agregar otras validaciones para los campos de texto si quisieras
+
+            if (isValid) {
+                // Si todo está bien, podrías mostrar un mensaje de 'enviando...'
+                // y luego enviar el formulario con AJAX o de forma normal.
+                console.log('Formulario válido, listo para enviar.');
+                // form.submit(); // Descomenta esta línea si quieres hacer un envío de página completa
+                
+                // Por ahora, solo mostraremos un mensaje de éxito simulado
+                msgDiv.textContent = '¡Formulario enviado con éxito! (Simulación)';
+                msgDiv.className = 'message success';
+            }
+        });
+    </script>
 </body>
 </html>
 """
@@ -145,8 +195,7 @@ def handle_validar_rut():
     es_valido = validar_rut(rut)
     return jsonify({'valido': es_valido})
 
-# (Aquí puedes agregar más rutas, como una para manejar el envío del formulario completo)
-# Ejemplo: @app.route('/submit-form', methods=['POST']) ...
+# (Aquí puedes agregar la ruta para manejar el envío del formulario a Supabase)
 
 # 6. EJECUCIÓN DE LA APLICACIÓN
 # =================================
