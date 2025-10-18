@@ -2,16 +2,17 @@ from flask import Flask, render_template_string, request, jsonify
 from flask_cors import CORS
 from datetime import datetime
 import os
+import io
 
 # 1. INICIALIZACIÓN DE FLASK
 # ==================================
 app = Flask(__name__)
 CORS(app)
 
-# 2. CONFIGURACIÓN DE SUPABASE (Variables de Entorno)
+# 2. CONFIGURACIÓN DE SUPABASE
 # =======================================================
 SUPABASE_URL = os.getenv('SUPABASE_URL', 'https://lgicluwwfecrbnfxmbzf.supabase.co')
-SUPABASE_KEY = os.getenv('SUPABASE_KEY', '') # La KEY debe estar en tus variables de entorno de Vercel
+SUPABASE_KEY = os.getenv('SUPABASE_KEY', '') # ¡ASEGÚRATE QUE ESTÉ EN VERCEL!
 
 sb = None
 if SUPABASE_KEY:
@@ -20,6 +21,8 @@ if SUPABASE_KEY:
         sb = create_client(SUPABASE_URL, SUPABASE_KEY)
     except Exception as e:
         print(f"Error al inicializar Supabase: {e}")
+else:
+    print("ADVERTENCIA: SUPABASE_KEY no encontrada. La API no funcionará.")
 
 # 3. LÓGICA DE LA APLICACIÓN (Funciones)
 # =========================================
@@ -48,7 +51,7 @@ def validar_rut(rut):
     except:
         return False
 
-# 4. PLANTILLA HTML CON JAVASCRIPT INTEGRADO
+# 4. PLANTILLA HTML CON JAVASCRIPT (Frontend)
 # ==================================================
 HTML = """<!DOCTYPE html>
 <html lang="es">
@@ -70,7 +73,7 @@ HTML = """<!DOCTYPE html>
         input:focus, textarea:focus { outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102,126,234,0.1); }
         .file-upload { border: 2px dashed #667eea; border-radius: 8px; padding: 20px; text-align: center; cursor: pointer; background: #f9f9f9; transition: all 0.2s ease-in-out; }
         .file-upload:hover { background: rgba(102,126,234,0.05); }
-        .file-upload.error { border-color: #dc3545; background: #f8d7da; } /* Estilo de error para el campo de archivo */
+        .file-upload.error { border-color: #dc3545; background: #f8d7da; }
         #fileInput { display: none; }
         .file-name { color: #667eea; margin-top: 10px; font-weight: 500; }
         .rut-status { margin-top: 5px; font-size: 0.9em; font-weight: 500; height: 1em; }
@@ -92,7 +95,8 @@ HTML = """<!DOCTYPE html>
             <p>Registro de Clientes - Receta Médica</p>
         </div>
         <div class="form-container">
-            <form id="form" novalidate> <div class="form-group">
+            <form id="form" novalidate>
+                <div class="form-group">
                     <label for="nombre">Nombre Completo *</label>
                     <input type="text" id="nombre" name="nombre" required placeholder="Juan Pérez">
                 </div>
@@ -128,9 +132,11 @@ HTML = """<!DOCTYPE html>
         const form = document.getElementById('form');
         const fileInput = document.getElementById('fileInput');
         const uploadArea = document.getElementById('uploadArea');
-        const msgDiv = document.getElementById('msg');
         const fileNameDiv = document.getElementById('fileName');
-
+        const msgDiv = document.getElementById('msg');
+        const btn = document.getElementById('btn');
+        const loading = document.getElementById('loading');
+        
         // Simular clic en el input oculto
         uploadArea.addEventListener('click', () => fileInput.click());
 
@@ -138,39 +144,66 @@ HTML = """<!DOCTYPE html>
         fileInput.addEventListener('change', () => {
             if (fileInput.files.length > 0) {
                 fileNameDiv.textContent = fileInput.files[0].name;
-                uploadArea.classList.remove('error'); // Quita el error si el usuario selecciona un archivo
+                uploadArea.classList.remove('error');
                 msgDiv.style.display = 'none';
             }
         });
 
-        // Validar el formulario antes de enviarlo
-        form.addEventListener('submit', function(event) {
-            // Prevenir el envío por defecto para validar primero
-            event.preventDefault();
+        // == ¡AQUÍ ESTÁ LA LÓGICA DE ENVÍO QUE ENCONTRASTE! ==
+        form.addEventListener('submit', async e => {
+            e.preventDefault(); // Evitar envío tradicional
 
+            // --- Validación simple de campos vacíos ---
             let isValid = true;
-            
-            // Validar que el archivo no esté vacío
             if (fileInput.files.length === 0) {
                 isValid = false;
                 uploadArea.classList.add('error');
-                msgDiv.textContent = 'Por favor, selecciona un archivo de receta para continuar.';
+                msgDiv.textContent = 'Por favor, selecciona un archivo de receta.';
                 msgDiv.className = 'message error';
-            } else {
-                uploadArea.classList.remove('error');
             }
+            
+            // (Podrías añadir más validaciones aquí)
+            
+            if (!isValid) return; 
+            // --- Fin Validación ---
 
-            // Aquí podrías agregar otras validaciones para los campos de texto si quisieras
+            // Crear FormData para enviar el archivo
+            const fd = new FormData(form);
 
-            if (isValid) {
-                // Si todo está bien, podrías mostrar un mensaje de 'enviando...'
-                // y luego enviar el formulario con AJAX o de forma normal.
-                console.log('Formulario válido, listo para enviar.');
-                // form.submit(); // Descomenta esta línea si quieres hacer un envío de página completa
-                
-                // Por ahora, solo mostraremos un mensaje de éxito simulado
-                msgDiv.textContent = '¡Formulario enviado con éxito! (Simulación)';
-                msgDiv.className = 'message success';
+            // Mostrar estado de carga
+            btn.disabled = true;
+            loading.style.display = 'block';
+            msgDiv.style.display = 'none';
+
+            try {
+                // Enviar al nuevo endpoint del backend
+                const res = await fetch('/api/registro', {
+                    method: 'POST',
+                    body: fd
+                });
+
+                const data = await res.json(); // Leer respuesta del servidor
+
+                if (res.ok) {
+                    // Éxito
+                    msgDiv.textContent = '✓ ¡Registro guardado con éxito!';
+                    msgDiv.className = 'message success';
+                    form.reset(); // Limpiar el formulario
+                    fileNameDiv.textContent = ''; // Limpiar nombre de archivo
+                } else {
+                    // Mostrar error del servidor
+                    msgDiv.textContent = 'Error: ' + (data.error || 'No se pudo completar el registro.');
+                    msgDiv.className = 'message error';
+                }
+            } catch (err) {
+                // Error de red o conexión
+                console.error('Error de fetch:', err);
+                msgDiv.textContent = 'Error de conexión: ' + err.message;
+                msgDiv.className = 'message error';
+            } finally {
+                // Ocultar estado de carga
+                btn.disabled = false;
+                loading.style.display = 'none';
             }
         });
     </script>
@@ -178,8 +211,8 @@ HTML = """<!DOCTYPE html>
 </html>
 """
 
-# 5. RUTAS DE LA API (Endpoints)
-# =================================
+# 5. RUTAS DE LA API (Endpoints del Backend)
+# ==================================================
 @app.route('/')
 def index():
     """Ruta principal que muestra el formulario HTML."""
@@ -187,18 +220,91 @@ def index():
 
 @app.route('/validar-rut', methods=['POST'])
 def handle_validar_rut():
-    """Ruta para validar el RUT desde el frontend."""
+    """Ruta para validar el RUT (si la usas desde JS)."""
     rut = request.json.get('rut')
     if not rut:
         return jsonify({'valido': False, 'error': 'RUT no proporcionado'}), 400
-    
     es_valido = validar_rut(rut)
     return jsonify({'valido': es_valido})
 
-# (Aquí puedes agregar la ruta para manejar el envío del formulario a Supabase)
+# ===== ¡¡NUEVA RUTA PARA RECIBIR EL FORMULARIO!! =====
+@app.route('/api/registro', methods=['POST'])
+def handle_registro():
+    """Recibe los datos del formulario, sube el archivo y guarda en Supabase."""
+    
+    # Verificar si Supabase está conectado
+    if not sb:
+        return jsonify({'error': 'La conexión con la base de datos no está configurada.'}), 500
+
+    try:
+        # 1. Obtener datos del formulario (request.form)
+        data = request.form
+        nombre = data.get('nombre')
+        email = data.get('email')
+        telefono = data.get('telefono')
+        rut = data.get('cedula')
+
+        # 2. Validar datos básicos
+        if not all([nombre, email, telefono, rut]):
+            return jsonify({'error': 'Faltan campos obligatorios'}), 400
+        
+        if not validar_rut(rut):
+            return jsonify({'error': 'El RUT no es válido'}), 400
+
+        # 3. Obtener el archivo (request.files)
+        if 'fileInput' not in request.files:
+            return jsonify({'error': 'No se encontró el archivo de la receta'}), 400
+            
+        file = request.files['fileInput']
+        if file.filename == '':
+            return jsonify({'error': 'No se seleccionó ningún archivo'}), 400
+
+        # Leer el contenido del archivo en memoria
+        file_bytes = file.read()
+        file_mimetype = file.mimetype
+
+        # 4. Subir archivo a Supabase Storage
+        # !!! IMPORTANTE: Debes crear un BUCKET llamado 'recetas' en Supabase
+        # y hacerlo PÚBLICO para que esto funcione.
+        file_ext = os.path.splitext(file.filename)[1]
+        file_name_in_storage = f"receta_{rut.replace('.','').replace('-','')}_{int(datetime.now().timestamp())}{file_ext}"
+        
+        try:
+            storage = sb.storage.from_("recetas") # <-- NOMBRE DE TU BUCKET
+            storage.upload(
+                file=file_bytes,
+                path=file_name_in_storage,
+                file_options={"content-type": file_mimetype}
+            )
+            file_url = storage.get_public_url(file_name_in_storage)
+        except Exception as e:
+            print(f"Error al subir archivo: {e}")
+            return jsonify({'error': f'Error al subir archivo: {str(e)}'}), 500
+
+        # 5. Insertar datos en la tabla de Supabase
+        # !!! IMPORTANTE: Debes tener una TABLA llamada 'clientes'
+        
+        tabla_clientes = "clientes" # <-- NOMBRE DE TU TABLA
+        
+        insert_data = {
+            'nombre': nombre,
+            'email': email,
+            'telefono': telefono,
+            'rut': rut,
+            'url_receta': file_url, # Guardamos el link a la receta en el Storage
+            'created_at': datetime.now().isoformat()
+        }
+        
+        response = sb.table(tabla_clientes).insert(insert_data).execute()
+
+        # 6. Devolver éxito
+        return jsonify({'message': 'Registro guardado con éxito!', 'data': response.data}), 201
+
+    except Exception as e:
+        print(f"Error en /api/registro: {e}")
+        return jsonify({'error': f'Error interno del servidor: {str(e)}'}), 500
 
 # 6. EJECUCIÓN DE LA APLICACIÓN
 # =================================
-# Esta parte permite ejecutar el servidor localmente para pruebas.
 if __name__ == '__main__':
     app.run(debug=True)
